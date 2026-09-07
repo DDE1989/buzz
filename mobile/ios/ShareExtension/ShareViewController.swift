@@ -1,17 +1,22 @@
+import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import os.log
 
 private let shareLog = Logger(subsystem: "xyz.block.buzz.share", category: "handoff")
 
-/// Receives items from the iOS share sheet, stages them in the App Group
-/// inbox, and hands off to the main app through `buzz://share?id=<id>`.
+/// Receives items from the iOS share sheet, lets the user pick a channel and
+/// write a message right in the sheet, then stages everything in the App
+/// Group inbox and hands off to the main app through `buzz://share?id=<id>`.
 ///
-/// The extension deliberately has no channel picker of its own: it never holds
-/// the signing key or a relay session, so the app does the actual posting.
+/// The extension never holds a relay session; the app does the actual
+/// posting, opening straight into the chosen channel's composer.
 final class ShareViewController: UIViewController {
   private let statusLabel = UILabel()
   private var didFinish = false
+  private var stagedDirectory: URL?
+  private var stagedID: String?
+  private var stagedItems: [BuzzShareInbox.Item] = []
 
   private var appGroupIdentifier: String? {
     Bundle.main.object(forInfoDictionaryKey: "BuzzAppGroupIdentifier") as? String
@@ -20,7 +25,7 @@ final class ShareViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .systemBackground
-    statusLabel.text = "Sending to Buzz…"
+    statusLabel.text = "Preparing…"
     statusLabel.font = .preferredFont(forTextStyle: .body)
     statusLabel.textColor = .secondaryLabel
     statusLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -33,10 +38,11 @@ final class ShareViewController: UIViewController {
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
-    Task { await stageAndHandOff() }
+    guard stagedID == nil else { return }
+    Task { await stageAndCompose() }
   }
 
-  private func stageAndHandOff() async {
+  private func stageAndCompose() async {
     let providers = (extensionContext?.inputItems as? [NSExtensionItem])?
       .flatMap { $0.attachments ?? [] } ?? []
     guard !providers.isEmpty else {
@@ -58,15 +64,92 @@ final class ShareViewController: UIViewController {
         cancel(message: "Unsupported content")
         return
       }
-      let payload = BuzzShareInbox.Payload(
-        id: id,
-        createdAt: Date().timeIntervalSince1970,
-        items: items
-      )
-      try BuzzShareInbox.writeManifest(payload, in: directory)
-      openContainerApp(payloadID: id)
+      stagedID = id
+      stagedDirectory = directory
+      stagedItems = items
+      showComposer()
     } catch {
       cancel(message: "Could not share to Buzz")
+    }
+  }
+
+  private func showComposer() {
+    let preview = SharePreview(
+      text: stagedItems
+        .filter { $0.kind != .file }
+        .compactMap(\.value)
+        .joined(separator: "\n"),
+      fileNames: stagedItems.compactMap { $0.kind == .file ? ($0.name ?? "file") : nil },
+      thumbnails: stagedItems.compactMap { item in
+        guard item.kind == .file, item.mimeType?.hasPrefix("image/") == true,
+          let path = item.path, let image = UIImage(contentsOfFile: path)
+        else { return nil }
+        return image.preparingThumbnail(of: CGSize(width: 168, height: 168)) ?? image
+      }
+    )
+    let targets = BuzzShareTargets.read(appGroupIdentifier: appGroupIdentifier)
+    let composer = ShareComposerView(
+      preview: preview,
+      targets: targets,
+      onSend: { [weak self] target, message in
+        self?.handOff(
+          target: BuzzShareInbox.Target(communityID: target.communityID, channelID: target.channelID),
+          message: message
+        )
+      },
+      onContinueInApp: { [weak self] message in
+        self?.handOff(target: nil, message: message)
+      },
+      onCancel: { [weak self] in
+        self?.discardStaged()
+        self?.cancel(message: "")
+      }
+    )
+    let host = UIHostingController(rootView: composer)
+    addChild(host)
+    host.view.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(host.view)
+    NSLayoutConstraint.activate([
+      host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      host.view.topAnchor.constraint(equalTo: view.topAnchor),
+      host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+    ])
+    host.didMove(toParent: self)
+    statusLabel.isHidden = true
+  }
+
+  /// Writes the manifest with the user's edited message and destination, then
+  /// opens the app. Files stay as staged; text items are replaced by the
+  /// message so edits made in the sheet win.
+  private func handOff(target: BuzzShareInbox.Target?, message: String) {
+    guard let id = stagedID, let directory = stagedDirectory else { return }
+    let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+    var items = stagedItems.filter { $0.kind == .file }
+    if !trimmed.isEmpty {
+      items.insert(
+        BuzzShareInbox.Item(kind: .text, value: trimmed, path: nil, name: nil, mimeType: nil),
+        at: 0
+      )
+    }
+    let payload = BuzzShareInbox.Payload(
+      id: id,
+      createdAt: Date().timeIntervalSince1970,
+      items: items,
+      target: target
+    )
+    do {
+      try BuzzShareInbox.writeManifest(payload, in: directory)
+    } catch {
+      cancel(message: "Could not share to Buzz")
+      return
+    }
+    openContainerApp(payloadID: id)
+  }
+
+  private func discardStaged() {
+    if let directory = stagedDirectory {
+      try? FileManager.default.removeItem(at: directory)
     }
   }
 
@@ -125,8 +208,10 @@ final class ShareViewController: UIViewController {
   }
 
   private func cancel(message: String) {
+    statusLabel.isHidden = false
     statusLabel.text = message
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+    let delay: TimeInterval = message.isEmpty ? 0 : 0.8
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
       guard let self, !self.didFinish else { return }
       self.didFinish = true
       self.extensionContext?.cancelRequest(

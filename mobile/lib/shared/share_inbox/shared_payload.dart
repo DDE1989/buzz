@@ -69,7 +69,22 @@ class SharedPayload {
   final String id;
   final List<SharedItem> items;
 
-  const SharedPayload({required this.id, required this.items});
+  /// Destination picked inside the extension, when the sheet offered one.
+  final String? communityId;
+  final String? channelId;
+
+  const SharedPayload({
+    required this.id,
+    required this.items,
+    this.communityId,
+    this.channelId,
+  });
+
+  bool get hasTarget =>
+      communityId != null &&
+      communityId!.isNotEmpty &&
+      channelId != null &&
+      channelId!.isNotEmpty;
 
   static SharedPayload? fromMap(Object? raw) {
     if (raw is! Map) return null;
@@ -78,7 +93,14 @@ class SharedPayload {
     if (id is! String || id.isEmpty || rawItems is! List) return null;
     final items = [for (final item in rawItems) ?SharedItem.fromMap(item)];
     if (items.isEmpty) return null;
-    return SharedPayload(id: id, items: List.unmodifiable(items));
+    final communityId = raw['communityId'];
+    final channelId = raw['channelId'];
+    return SharedPayload(
+      id: id,
+      items: List.unmodifiable(items),
+      communityId: communityId is String ? communityId : null,
+      channelId: channelId is String ? channelId : null,
+    );
   }
 
   /// Text and links joined into one composer body, or empty.
@@ -96,8 +118,11 @@ class SharedPayload {
   bool operator ==(Object other) =>
       other is SharedPayload &&
       other.id == id &&
+      other.communityId == communityId &&
+      other.channelId == channelId &&
       listEquals(other.items, items);
 
   @override
-  int get hashCode => Object.hash(id, Object.hashAll(items));
+  int get hashCode =>
+      Object.hash(id, communityId, channelId, Object.hashAll(items));
 }

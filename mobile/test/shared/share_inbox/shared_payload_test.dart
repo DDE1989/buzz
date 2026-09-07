@@ -32,6 +32,29 @@ void main() {
       ]);
     });
 
+    test('carries the destination picked in the extension', () {
+      final payload = SharedPayload.fromMap({
+        'id': 'abc',
+        'items': [
+          {'kind': 'text', 'value': 'hello'},
+        ],
+        'communityId': 'c1',
+        'channelId': 'ch1',
+      });
+      expect(payload!.hasTarget, isTrue);
+      expect(payload.communityId, 'c1');
+      expect(payload.channelId, 'ch1');
+
+      final untargeted = SharedPayload.fromMap({
+        'id': 'abc',
+        'items': [
+          {'kind': 'text', 'value': 'hello'},
+        ],
+        'communityId': '',
+      });
+      expect(untargeted!.hasTarget, isFalse);
+    });
+
     test('drops unusable items and rejects empty payloads', () {
       final payload = SharedPayload.fromMap({
         'id': 'abc',
