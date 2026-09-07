@@ -9,6 +9,7 @@ import os.log
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var mediaUploadChannel: FlutterMethodChannel?
   private var pushChannel: FlutterMethodChannel?
+  private var localNotificationChannel: FlutterMethodChannel?
   private let apnsRegistrationBuffer = APNsRegistrationBuffer()
   private let pushNavigationBuffer = BuzzPushNavigationBuffer()
   private var apnsDeviceToken: Data?
@@ -26,6 +27,9 @@ import os.log
     appGroupIdentifier: appGroupIdentifier,
     endpointGrantStore: endpointGrantStore,
     keychainAccessGroup: pushKeychainAccessGroup
+  )
+  private lazy var localNotificationBridge = BuzzLocalNotificationBridge(
+    appGroupIdentifier: appGroupIdentifier
   )
   private var qrScannerChannel: FlutterMethodChannel?
   private var inlinePhotoPickerSupportChannel: FlutterMethodChannel?
@@ -64,6 +68,15 @@ import os.log
     }
     apnsRegistrationBuffer.attach { [weak self] update in
       self?.pushChannel?.invokeMethod(update.method, arguments: update.arguments)
+    }
+    localNotificationChannel = FlutterMethodChannel(
+      name: "buzz/local_notifications",
+      binaryMessenger: messenger
+    )
+    localNotificationChannel?.setMethodCallHandler { [weak self] call, result in
+      if self?.localNotificationBridge.handle(call, result: result) != true {
+        result(FlutterMethodNotImplemented)
+      }
     }
     qrScannerChannel = FlutterMethodChannel(
       name: "buzz/qr_scanner",
@@ -289,6 +302,26 @@ import os.log
   ) {
     super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
     apnsRegistrationBuffer.recordError(error.localizedDescription)
+  }
+
+  /// App-decided message notifications must show while the app is in the
+  /// foreground: Dart already suppressed the channel the user is looking at.
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler:
+      @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    let userInfo = notification.request.content.userInfo
+    if BuzzPushNavigationTarget.decodeIfPresent(from: userInfo) != nil {
+      completionHandler([.banner, .list, .sound])
+      return
+    }
+    super.userNotificationCenter(
+      center,
+      willPresent: notification,
+      withCompletionHandler: completionHandler
+    )
   }
 
   override func userNotificationCenter(

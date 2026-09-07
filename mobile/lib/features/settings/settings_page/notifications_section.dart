@@ -3,6 +3,22 @@ part of '../settings_page.dart';
 class _NotificationsSection extends ConsumerWidget {
   const _NotificationsSection();
 
+  /// Turning notifications on asks iOS for display permission right away so
+  /// app-decided banners work even when the relay advertises no push
+  /// descriptor (remote push asks again later on its own; iOS prompts once).
+  static Future<void> _setEnabled(
+    WidgetRef ref,
+    String communityId,
+    bool enabled,
+  ) async {
+    await ref
+        .read(communityListProvider.notifier)
+        .setPushNotificationsEnabled(communityId, enabled);
+    if (!enabled) return;
+    await ref.read(localNotificationAuthorizerProvider)();
+    await ref.read(buzzPushAuthorizationStatusProvider.notifier).refresh();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (defaultTargetPlatform != TargetPlatform.iOS) {
@@ -49,19 +65,11 @@ class _NotificationsSection extends ConsumerWidget {
               : null,
           trailing: Switch.adaptive(
             value: community.pushNotificationsEnabled,
-            onChanged: (enabled) => unawaited(
-              ref
-                  .read(communityListProvider.notifier)
-                  .setPushNotificationsEnabled(community.id, enabled),
-            ),
+            onChanged: (enabled) =>
+                unawaited(_setEnabled(ref, community.id, enabled)),
           ),
           onTap: () => unawaited(
-            ref
-                .read(communityListProvider.notifier)
-                .setPushNotificationsEnabled(
-                  community.id,
-                  !community.pushNotificationsEnabled,
-                ),
+            _setEnabled(ref, community.id, !community.pushNotificationsEnabled),
           ),
         ),
         if (showSettingsRecovery)

@@ -20,6 +20,9 @@ import 'thread_follows/thread_follows_provider.dart';
 import 'unread_badge/is_high_priority_event.dart';
 import 'unread_badge/observed_unread_event.dart';
 import 'unread_badge/should_notify_for_event.dart';
+import '../../shared/notifications/local_notifications_provider.dart';
+import '../../shared/profile/user_cache_provider.dart';
+import 'dm_channel_labels.dart';
 
 part 'channel_directory.dart';
 part 'channel_member_snapshots.dart';
@@ -666,6 +669,7 @@ class ChannelsNotifier extends AsyncNotifier<List<Channel>> {
             channelId: channel.id,
           )) {
         _recordUnreadEvent(channel, event, myPk);
+        _notifyLiveMessage(channel, event, myPk);
         final eventTime = DateTime.fromMillisecondsSinceEpoch(
           event.createdAt * 1000,
           isUtc: true,
@@ -678,6 +682,35 @@ class ChannelsNotifier extends AsyncNotifier<List<Channel>> {
 
       return updated;
     });
+  }
+
+  /// Surfaces a live message the unread pipeline flagged as an iOS banner.
+  /// The notifier decides visibility (foreground channel, community toggle).
+  void _notifyLiveMessage(Channel channel, NostrEvent event, String myPk) {
+    final senderName = ref
+        .read(userCacheProvider.notifier)
+        .get(event.pubkey)
+        ?.label;
+    unawaited(
+      ref
+          .read(localMessageNotifierProvider)
+          .notify(
+            eventId: event.id,
+            channelId: channel.id,
+            senderPubkey: event.pubkey,
+            senderName: senderName,
+            content: event.content,
+            hasAttachments: event.tags.any(
+              (tag) => tag.isNotEmpty && tag[0] == 'imeta',
+            ),
+            isDm: channel.isDm,
+            channelLabel: resolveDmChannelDisplayLabel(
+              channel,
+              currentPubkey: myPk,
+            ),
+            memberCount: channel.memberCount,
+          ),
+    );
   }
 
   Set<String> _mutedChannelIds() => {
