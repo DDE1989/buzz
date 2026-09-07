@@ -9,6 +9,7 @@ import os.log
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var mediaUploadChannel: FlutterMethodChannel?
   private var pushChannel: FlutterMethodChannel?
+  private var shareInboxChannel: FlutterMethodChannel?
   private let apnsRegistrationBuffer = APNsRegistrationBuffer()
   private let pushNavigationBuffer = BuzzPushNavigationBuffer()
   private var apnsDeviceToken: Data?
@@ -26,6 +27,9 @@ import os.log
     appGroupIdentifier: appGroupIdentifier,
     endpointGrantStore: endpointGrantStore,
     keychainAccessGroup: pushKeychainAccessGroup
+  )
+  private lazy var shareInboxBridge = BuzzShareInboxBridge(
+    appGroupIdentifier: appGroupIdentifier
   )
   private var qrScannerChannel: FlutterMethodChannel?
   private var inlinePhotoPickerSupportChannel: FlutterMethodChannel?
@@ -64,6 +68,15 @@ import os.log
     }
     apnsRegistrationBuffer.attach { [weak self] update in
       self?.pushChannel?.invokeMethod(update.method, arguments: update.arguments)
+    }
+    shareInboxChannel = FlutterMethodChannel(
+      name: "buzz/share_inbox",
+      binaryMessenger: messenger
+    )
+    shareInboxChannel?.setMethodCallHandler { [weak self] call, result in
+      if self?.shareInboxBridge.handle(call, result: result) != true {
+        result(FlutterMethodNotImplemented)
+      }
     }
     qrScannerChannel = FlutterMethodChannel(
       name: "buzz/qr_scanner",
