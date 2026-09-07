@@ -10,6 +10,7 @@
 		BZZ00000000000000000001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BZZ00000000000000000006 /* NotificationService.swift */; };
 		BZZ00000000000000000002 /* NotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BZZ00000000000000000009 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BZS000000000000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BZS000000000000000000006 /* ShareViewController.swift */; };
+		BZS000000000000000000018 /* ShareComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BZS000000000000000000019 /* ShareComposerView.swift */; };
 		BZS000000000000000000002 /* BuzzShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BZS00000000000000000000A /* BuzzShareInbox.swift */; };
 		BZS000000000000000000003 /* BuzzShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BZS00000000000000000000A /* BuzzShareInbox.swift */; };
 		BZS000000000000000000004 /* ShareInboxBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BZS00000000000000000000B /* ShareInboxBridge.swift */; };
@@ -95,6 +96,7 @@
 		BZZ00000000000000000008 /* NotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = NotificationService.entitlements; sourceTree = "<group>"; };
 		BZZ00000000000000000009 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BZS000000000000000000006 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		BZS000000000000000000019 /* ShareComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareComposerView.swift; sourceTree = "<group>"; };
 		BZS000000000000000000007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BZS000000000000000000008 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		BZS000000000000000000009 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -193,6 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				BZS000000000000000000006 /* ShareViewController.swift */,
+				BZS000000000000000000019 /* ShareComposerView.swift */,
 				BZS000000000000000000007 /* Info.plist */,
 				BZS000000000000000000008 /* ShareExtension.entitlements */,
 			);
@@ -628,6 +631,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BZS000000000000000000001 /* ShareViewController.swift in Sources */,
+				BZS000000000000000000018 /* ShareComposerView.swift in Sources */,
 				BZS000000000000000000002 /* BuzzShareInbox.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

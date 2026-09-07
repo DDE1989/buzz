@@ -39,26 +39,50 @@ enum BuzzShareInbox {
     }
   }
 
+  /// Destination the user already picked inside the extension, if any.
+  struct Target: Codable, Equatable {
+    let communityID: String
+    let channelID: String
+  }
+
   struct Payload: Codable, Equatable {
     let id: String
     let createdAt: TimeInterval
     let items: [Item]
+    var target: Target?
+
+    init(id: String, createdAt: TimeInterval, items: [Item], target: Target? = nil) {
+      self.id = id
+      self.createdAt = createdAt
+      self.items = items
+      self.target = target
+    }
 
     var flutterArguments: [String: Any] {
-      [
+      var map: [String: Any] = [
         "id": id,
         "createdAt": createdAt,
         "items": items.map(\.flutterArguments),
       ]
+      if let target {
+        map["communityId"] = target.communityID
+        map["channelId"] = target.channelID
+      }
+      return map
     }
   }
 
+  static func containerURL(appGroupIdentifier: String?) -> URL? {
+    guard let appGroupIdentifier, !appGroupIdentifier.isEmpty else { return nil }
+    return FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: appGroupIdentifier
+    )
+  }
+
   static func inboxURL(appGroupIdentifier: String?) -> URL? {
-    guard let appGroupIdentifier, !appGroupIdentifier.isEmpty,
-      let container = FileManager.default.containerURL(
-        forSecurityApplicationGroupIdentifier: appGroupIdentifier
-      )
-    else { return nil }
+    guard let container = containerURL(appGroupIdentifier: appGroupIdentifier) else {
+      return nil
+    }
     return
       container
       .appendingPathComponent("Library", isDirectory: true)
@@ -138,5 +162,85 @@ enum BuzzShareInbox {
 
   private static func isSafeIdentifier(_ id: String) -> Bool {
     !id.isEmpty && id.allSatisfy { $0.isHexDigit || $0 == "-" }
+  }
+}
+
+/// The destinations the app offers the Share Extension.
+///
+/// The app rewrites this file whenever its channel list changes, so the sheet
+/// can show the same channels, in the same order, without the app running.
+/// Labels are presentation only; the app re-validates the chosen channel
+/// against its live channel list before composing anything.
+enum BuzzShareTargets {
+  static let fileName = "share-targets.json"
+  static let currentVersion = 1
+
+  struct Community: Codable, Equatable, Identifiable {
+    let id: String
+    let name: String
+  }
+
+  struct Target: Codable, Equatable, Identifiable {
+    let communityID: String
+    let channelID: String
+    let label: String
+    let isDM: Bool
+    let lastMessageAt: TimeInterval?
+
+    var id: String { "\(communityID)/\(channelID)" }
+  }
+
+  struct File: Codable, Equatable {
+    var version: Int = currentVersion
+    var communities: [Community]
+    var targets: [Target]
+    var updatedAt: TimeInterval
+
+    static let empty = File(communities: [], targets: [], updatedAt: 0)
+  }
+
+  static func fileURL(appGroupIdentifier: String?) -> URL? {
+    guard let container = BuzzShareInbox.containerURL(appGroupIdentifier: appGroupIdentifier)
+    else { return nil }
+    let directory =
+      container
+      .appendingPathComponent("Library", isDirectory: true)
+      .appendingPathComponent("Application Support", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory.appendingPathComponent(fileName)
+  }
+
+  static func read(appGroupIdentifier: String?) -> File {
+    guard let url = fileURL(appGroupIdentifier: appGroupIdentifier),
+      let data = try? Data(contentsOf: url),
+      let file = try? JSONDecoder().decode(File.self, from: data),
+      file.version == currentVersion
+    else { return .empty }
+    return file
+  }
+
+  /// Replaces one community's targets, keeps the others, and drops targets of
+  /// communities the app no longer has.
+  static func merge(
+    into existing: File,
+    communities: [Community],
+    communityID: String,
+    targets: [Target]
+  ) -> File {
+    let known = Set(communities.map(\.id))
+    let kept = existing.targets.filter { $0.communityID != communityID && known.contains($0.communityID) }
+    return File(
+      communities: communities,
+      targets: kept + targets.filter { $0.communityID == communityID },
+      updatedAt: Date().timeIntervalSince1970
+    )
+  }
+
+  static func write(_ file: File, appGroupIdentifier: String?) throws {
+    guard let url = fileURL(appGroupIdentifier: appGroupIdentifier) else {
+      throw CocoaError(.fileNoSuchFile)
+    }
+    let data = try JSONEncoder().encode(file)
+    try data.write(to: url, options: .atomic)
   }
 }
