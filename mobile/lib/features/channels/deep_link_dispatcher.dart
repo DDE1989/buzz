@@ -65,6 +65,7 @@ class _DeepLinkDispatcherState extends ConsumerState<DeepLinkDispatcher> {
     if (widget.dispatchMessageLinks) {
       ref.listen<AsyncValue<List<Channel>>>(channelsProvider, (_, _) {
         _maybeDispatch(ref.read(pendingDeepLinkProvider));
+        _maybePresentShare(ref.read(pendingSharedPayloadProvider));
       });
       ref.listen<SharedPayload?>(pendingSharedPayloadProvider, (_, payload) {
         _maybePresentShare(payload);
@@ -88,6 +89,14 @@ class _DeepLinkDispatcherState extends ConsumerState<DeepLinkDispatcher> {
     final navigatorContext = context;
     unawaited(() async {
       try {
+        if (payload.hasTarget) {
+          final handled = await _dispatchTargetedShare(payload);
+          if (handled) return;
+          if (!navigatorContext.mounted ||
+              ref.read(pendingSharedPayloadProvider) != payload) {
+            return;
+          }
+        }
         final channel = await showShareTargetSheet(navigatorContext, payload);
         if (channel == null) {
           // Dismissed: drop the payload so it does not resurface on resume.
@@ -100,6 +109,39 @@ class _DeepLinkDispatcherState extends ConsumerState<DeepLinkDispatcher> {
         _presentingShare = false;
       }
     }());
+  }
+
+  /// A payload whose destination was picked in the extension goes straight
+  /// into that channel. Returns false when the picker should take over
+  /// instead (community gone, channel gone). A community switch remounts the
+  /// subtree, whose dispatcher retries; channels still loading are retried by
+  /// the channelsProvider listener.
+  Future<bool> _dispatchTargetedShare(SharedPayload payload) async {
+    final notifier = ref.read(pendingSharedPayloadProvider.notifier);
+    final preparation = await notifier.prepareCommunity(payload.communityId!);
+    if (!mounted || ref.read(pendingSharedPayloadProvider) != payload) {
+      return true;
+    }
+    switch (preparation) {
+      case SharedPayloadCommunityPreparation.switched:
+        return true;
+      case SharedPayloadCommunityPreparation.unavailable:
+      case SharedPayloadCommunityPreparation.failed:
+        return false;
+      case SharedPayloadCommunityPreparation.ready:
+        break;
+    }
+    final channels = ref.read(channelsProvider).asData?.value;
+    if (channels == null) return true;
+    final channel = channels
+        .where((candidate) => candidate.id == payload.channelId)
+        .firstOrNull;
+    if (channel == null) return false;
+    seedComposerWithSharedPayload(ref, channel.id, payload);
+    await notifier.consume();
+    if (!mounted) return true;
+    _pushChannel(channel, ChannelDeepLink(channelId: channel.id));
+    return true;
   }
 
   void _maybeDispatch(BuzzDeepLink? link) {

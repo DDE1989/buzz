@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../community/community_provider.dart';
 import '../relay/app_lifecycle_provider.dart';
 import 'share_inbox_bridge.dart';
 import 'shared_payload.dart';
@@ -14,6 +15,12 @@ final sharedPayloadReaderProvider = Provider<SharedPayloadReader>(
 final sharedPayloadDiscarderProvider = Provider<SharedPayloadDiscarder>(
   (ref) => discardSharedPayload,
 );
+
+final shareTargetsSyncerProvider = Provider<ShareTargetsSyncer>(
+  (ref) => syncShareTargets,
+);
+
+enum SharedPayloadCommunityPreparation { ready, switched, unavailable, failed }
 
 /// The share-sheet payload waiting for the user to pick a destination.
 ///
@@ -62,6 +69,31 @@ class PendingSharedPayloadNotifier extends Notifier<SharedPayload?> {
 
   /// Drop the current payload without using it (user dismissed the picker).
   Future<void> dismiss() => consume();
+
+  /// Makes the community a targeted payload names the active one.
+  Future<SharedPayloadCommunityPreparation> prepareCommunity(
+    String communityId,
+  ) async {
+    try {
+      final communities = await ref.read(communityListProvider.future);
+      if (!communities.any((community) => community.id == communityId)) {
+        return SharedPayloadCommunityPreparation.unavailable;
+      }
+      final active = await ref.read(activeCommunityProvider.future);
+      if (active?.id == communityId) {
+        return SharedPayloadCommunityPreparation.ready;
+      }
+      await ref
+          .read(communityListProvider.notifier)
+          .switchCommunity(communityId);
+      return SharedPayloadCommunityPreparation.switched;
+    } catch (error) {
+      debugPrint(
+        'share-inbox: failed to switch to community $communityId: $error',
+      );
+      return SharedPayloadCommunityPreparation.failed;
+    }
+  }
 }
 
 final pendingSharedPayloadProvider =
