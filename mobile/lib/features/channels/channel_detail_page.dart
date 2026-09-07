@@ -69,6 +69,7 @@ import '../../shared/read_state/deferred_read_state_update.dart';
 import '../../shared/read_state/read_state_format.dart';
 import '../../shared/read_state/read_state_provider.dart';
 import '../../shared/read_state/read_state_time.dart';
+import '../../shared/notifications/local_notifications_provider.dart';
 import 'reaction_row.dart';
 import 'recent_emoji_provider.dart';
 import 'send_message_provider.dart';
@@ -553,6 +554,16 @@ class ChannelDetailPage extends HookConsumerWidget {
         initialForcedUnreadMessageIds,
       ],
     );
+
+    useEffect(() {
+      // Provider writes are deferred out of build/dispose. Entering also
+      // clears banners this channel earned while it was not on screen.
+      final visible = ref.read(visibleChannelProvider.notifier);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        visible.enter(channel.id);
+      });
+      return () => Future.microtask(() => visible.leave(channel.id));
+    }, [channel.id]);
 
     useEffect(() {
       if (!readState.isReady || readTimestamp == null) {
