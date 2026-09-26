@@ -35,9 +35,20 @@ target 'Runner' do
   end
 end
 
+# Xcode 27 rejects pod targets whose deployment target is below iOS 15 as a
+# hard "Target Integrity" error (older Xcode only warned). Several transitive
+# pods still declare 9.0-13.0, so raise them to the platform floor above.
+MINIMUM_IOS_DEPLOYMENT_TARGET = Gem::Version.new('15.0')
+
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if current && Gem::Version.new(current) < MINIMUM_IOS_DEPLOYMENT_TARGET
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = MINIMUM_IOS_DEPLOYMENT_TARGET.to_s
+      end
+    end
   end
   # Flutter creates plugin symlinks during installation, so load the upstream
   # helper here rather than requiring an existing Pods install at parse time.
