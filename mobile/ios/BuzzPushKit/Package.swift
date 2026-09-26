@@ -8,7 +8,10 @@ let package = Package(
         .library(name: "BuzzPushKit", targets: ["BuzzPushKit"])
     ],
     dependencies: [
-        .package(url: "https://github.com/21-DOT-DEV/swift-secp256k1.git", exact: "0.21.1")
+        // Fork of 0.21.1 with a one-line fix for Xcode 27's Swift ("Ambiguous use of
+        // 'words'"). Newer upstream releases need a SwiftPM build plugin that Xcode 27
+        // cannot yet resolve for the notification extension.
+        .package(url: "https://github.com/DDE1989/swift-secp256k1.git", exact: "0.21.1-xcode27")
     ],
     targets: [
         .target(
