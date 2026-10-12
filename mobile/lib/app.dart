@@ -26,6 +26,7 @@ import 'features/pairing/pairing_page.dart';
 import 'features/pairing/pairing_provider.dart';
 import 'features/channels/agent_activity/observer_subscription.dart';
 import 'features/channels/channel_detail_page.dart';
+import 'features/channels/share_targets_sync.dart';
 import 'features/channels/deep_link_dispatcher.dart';
 import 'features/channels/voice_note_recording.dart';
 import 'features/profile/user_status_cache_provider.dart';
@@ -354,6 +355,9 @@ class App extends HookConsumerWidget {
       ref.watch(observerRelayProvider);
       ref.watch(appLifecycleProvider);
       ref.watch(userStatusCacheProvider);
+      // Listen rather than watch: the sync state changes as channels reorder
+      // and must not rebuild the app root.
+      ref.listen(shareTargetsSyncProvider, (_, _) {});
       if (ref.watch(activeCommunityProvider).value?.pushNotificationsEnabled ==
               true &&
           ref.watch(currentRelayPushDescriptorProvider).value != null) {
